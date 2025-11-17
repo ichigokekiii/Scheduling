@@ -9,57 +9,80 @@ public class SRTF {
         String[] grouped;
         int groupedSize;
         int totalBurst;
+        double avgTAT;
+        double avgWT;
     }
 
-    public void srtfResult() {
+    public JPanel getUI() {
 
-        JFrame inputFrame = new JFrame("SRTF Input");
-        inputFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        inputFrame.setSize(420, 500);
-        inputFrame.setLocationRelativeTo(null);
+        JPanel mainPanel = new JPanel(new BorderLayout(10,10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(12,12,12,12));
+        Color headerBg = new Color(245, 228, 215);
+        Color sidebarBg = new Color(47, 35, 65);
+        Color accent = new Color(64, 51, 79);
 
-        JPanel main = new JPanel();
-        main.setLayout(new BoxLayout(main, BoxLayout.Y_AXIS));
-        main.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        JLabel title = new JLabel("SRTF (Shortest Remaining Time First)", SwingConstants.CENTER);
+        title.setOpaque(true);
+        title.setBackground(headerBg);
+        title.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
+        mainPanel.add(title, BorderLayout.NORTH);
+
+        JPanel inputArea = new JPanel();
+        inputArea.setLayout(new BoxLayout(inputArea, BoxLayout.Y_AXIS));
+        inputArea.setBorder(BorderFactory.createTitledBorder("Input"));
 
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        top.setBackground(Color.WHITE);
         top.add(new JLabel("Number of processes:"));
         SpinnerNumberModel model = new SpinnerNumberModel(1, 1, 50, 1);
         JSpinner numSpinner = new JSpinner(model);
         top.add(numSpinner);
         JButton createBtn = new JButton("Create");
+        createBtn.setBackground(accent);
+        createBtn.setForeground(Color.WHITE);
         top.add(createBtn);
-        main.add(top);
+        inputArea.add(top);
 
-        JPanel rowsContainer = new JPanel();
-        rowsContainer.setLayout(new BorderLayout());
-        main.add(Box.createRigidArea(new Dimension(0, 8)));
-        main.add(new JScrollPane(rowsContainer, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+        JPanel rowsContainer = new JPanel(new BorderLayout());
+        rowsContainer.setPreferredSize(new Dimension(360, 260));
+        inputArea.add(Box.createRigidArea(new Dimension(0,8)));
+        inputArea.add(new JScrollPane(rowsContainer, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER));
 
         JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.CENTER));
         JButton runBtn = new JButton("Run SRTF");
         runBtn.setEnabled(false);
+        runBtn.setBackground(accent);
+        runBtn.setForeground(Color.WHITE);
         actionRow.add(runBtn);
-        main.add(Box.createRigidArea(new Dimension(0, 8)));
-        main.add(actionRow);
+        inputArea.add(Box.createRigidArea(new Dimension(0,8)));
+        inputArea.add(actionRow);
 
-        inputFrame.add(main);
-        inputFrame.setVisible(true);
+        JPanel resultArea = new JPanel(new BorderLayout(8,8));
+        resultArea.setBorder(BorderFactory.createTitledBorder("Result"));
+        JLabel hint = new JLabel("<html>Fill inputs on the left and click <b>Run SRTF</b>.</html>");
+        hint.setHorizontalAlignment(SwingConstants.CENTER);
+        resultArea.add(hint, BorderLayout.CENTER);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, inputArea, resultArea);
+        split.setResizeWeight(0.40);
+        mainPanel.add(split, BorderLayout.CENTER);
 
         final JTextField[][] fieldsRef = new JTextField[1][];
+
         createBtn.addActionListener(e -> {
             int n = (Integer) numSpinner.getValue();
             JPanel rows = new JPanel();
             rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
-            rows.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-
+            rows.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
             JTextField[][] inputs = new JTextField[n][2];
 
             for (int i = 0; i < n; i++) {
                 JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT));
+                row.setBackground(Color.WHITE);
                 JLabel lbl = new JLabel("P" + (i + 1));
-                lbl.setPreferredSize(new Dimension(40, 20));
+                lbl.setPreferredSize(new Dimension(40,20));
                 row.add(lbl);
 
                 row.add(new JLabel("AT:"));
@@ -67,7 +90,7 @@ public class SRTF {
                 inputs[i][0] = at;
                 row.add(at);
 
-                row.add(Box.createRigidArea(new Dimension(8, 0)));
+                row.add(Box.createRigidArea(new Dimension(8,0)));
                 row.add(new JLabel("BT:"));
                 JTextField bt = new JTextField(6);
                 inputs[i][1] = bt;
@@ -94,7 +117,7 @@ public class SRTF {
             int n = (Integer) numSpinner.getValue();
             JTextField[] fields = fieldsRef[0];
             if (fields == null || fields.length < n * 2) {
-                JOptionPane.showMessageDialog(inputFrame, "Please click Create and fill all fields.");
+                JOptionPane.showMessageDialog(mainPanel, "Please click Create and fill all fields.");
                 return;
             }
 
@@ -114,7 +137,7 @@ public class SRTF {
                     }
                 }
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(inputFrame, "Please enter valid non-negative integers for all fields.");
+                JOptionPane.showMessageDialog(mainPanel, "Please enter valid non-negative integers for all fields.");
                 return;
             }
 
@@ -124,11 +147,139 @@ public class SRTF {
             }
 
             SRTFOutput result = computeSRTF(p, n);
-            inputFrame.dispose();
-            showUI(result);
-        });
-    }
 
+            resultArea.removeAll();
+
+            String[] cols = {"PID", "AT", "BT", "CT", "TAT", "WT"};
+            String[][] data = new String[result.processes.length][6];
+
+            double totalTAT = 0, totalWT = 0;
+
+            for (int i = 0; i < result.processes.length; i++) {
+                Process pr = result.processes[i];
+                data[i][0] = pr.pid;
+                data[i][1] = String.valueOf(pr.arrivalTime);
+                data[i][2] = String.valueOf(pr.burstTime);
+                data[i][3] = String.valueOf(pr.completionTime);
+                data[i][4] = String.valueOf(pr.turnaroundTime());
+                data[i][5] = String.valueOf(pr.waitingTime());
+                totalTAT += pr.turnaroundTime();
+                totalWT += pr.waitingTime();
+            }
+
+            JTable table = new JTable(data, cols);
+            table.setFillsViewportHeight(true);
+            table.setPreferredScrollableViewportSize(new Dimension(520, 120));
+            JScrollPane tableScroll = new JScrollPane(table);
+            resultArea.add(tableScroll, BorderLayout.NORTH);
+
+            JPanel centerPanel = new JPanel(new BorderLayout());
+            centerPanel.setBackground(Color.WHITE);
+
+            JPanel ganttOuter = new JPanel(new BorderLayout());
+            ganttOuter.setBorder(BorderFactory.createTitledBorder("Gantt Chart"));
+
+            JPanel ganttPanel = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+
+                    int paddingLeft = 25;
+                    int y = 30;
+                    int height = 40;
+                    int x = paddingLeft;
+
+                    Color[] pastel = {
+                        new Color(255, 179, 186),
+                        new Color(255, 223, 186),
+                        new Color(255, 255, 186),
+                        new Color(186, 255, 201),
+                        new Color(186, 225, 255)
+                    };
+
+                    for (int i = 0; i < result.groupedSize; i++) {
+                        String block = result.grouped[i];
+                        String pid = block.substring(0, block.indexOf("("));
+                        int len = Integer.parseInt(block.substring(block.indexOf("(") + 1, block.indexOf(")")));
+
+                        g.setColor(pastel[i % pastel.length]);
+                        int blockWidth = len * 28;
+                        g.fillRect(x, y, blockWidth, height);
+
+                        g.setColor(Color.DARK_GRAY);
+                        g.drawRect(x, y, blockWidth, height);
+
+                        g.setColor(Color.BLACK);
+                        g.drawString(pid, x + 6, y + 25);
+
+                        x += blockWidth;
+                    }
+
+                    int tickX = paddingLeft;
+                    g.setColor(Color.BLACK);
+                    g.setFont(g.getFont().deriveFont(Font.PLAIN, 12f));
+
+                    int currentTime = 0;
+                    g.drawString(String.valueOf(0), tickX - 6, y + height + 20);
+
+                    for (int i = 0; i < result.groupedSize; i++) {
+                        String block = result.grouped[i];
+                        int len = Integer.parseInt(block.substring(block.indexOf("(") + 1, block.indexOf(")")));
+                        tickX += len * 28;
+                        currentTime += len;
+                        g.drawString(String.valueOf(currentTime), tickX - 6, y + height + 20);
+                    }
+                }
+            };
+
+            int totalWidth = result.totalBurst * 28 + 100; 
+            ganttPanel.setPreferredSize(new Dimension(totalWidth, 120));
+
+            ganttOuter.add(new JScrollPane(ganttPanel,
+                JScrollPane.VERTICAL_SCROLLBAR_NEVER,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED),
+                BorderLayout.CENTER);
+
+            centerPanel.add(ganttOuter, BorderLayout.CENTER);
+
+            JPanel statsPanel = new JPanel();
+            statsPanel.setLayout(new BoxLayout(statsPanel, BoxLayout.Y_AXIS));
+            statsPanel.setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+            statsPanel.setBackground(Color.WHITE);
+
+            double avgTAT = totalTAT / result.processes.length;
+            double avgWT = totalWT / result.processes.length;
+
+            JLabel totalTATLabel = new JLabel(String.format("Total Turnaround Time: %.0f", totalTAT));
+            totalTATLabel.setFont(totalTATLabel.getFont().deriveFont(Font.PLAIN, 12f));
+
+            JLabel totalWTLabel = new JLabel(String.format("Total Waiting Time: %.0f", totalWT));
+            totalWTLabel.setFont(totalWTLabel.getFont().deriveFont(Font.PLAIN, 12f));
+
+            JLabel avgTATLabel = new JLabel(String.format("Average Turnaround Time: %.2f ms", avgTAT));
+            avgTATLabel.setFont(avgTATLabel.getFont().deriveFont(Font.PLAIN, 12f));
+
+            JLabel avgWTLabel = new JLabel(String.format("Average Waiting Time: %.2f ms", avgWT));
+            avgWTLabel.setFont(avgWTLabel.getFont().deriveFont(Font.PLAIN, 12f));
+
+            statsPanel.add(totalTATLabel);
+            statsPanel.add(Box.createRigidArea(new Dimension(0,6)));
+            statsPanel.add(totalWTLabel);
+            statsPanel.add(Box.createRigidArea(new Dimension(0,6)));
+            statsPanel.add(avgTATLabel);
+            statsPanel.add(Box.createRigidArea(new Dimension(0,6)));
+            statsPanel.add(avgWTLabel);
+
+            centerPanel.add(statsPanel, BorderLayout.SOUTH);
+
+            resultArea.add(centerPanel, BorderLayout.CENTER);
+
+            resultArea.revalidate();
+            resultArea.repaint();
+        });
+
+        return mainPanel;
+    }
 
     private SRTFOutput computeSRTF(Process[] p, int n) {
 
@@ -225,98 +376,5 @@ public class SRTF {
         out.totalBurst = totalBurst;
 
         return out;
-    }
-
-
-    private void showUI(SRTFOutput r) {
-
-        JFrame frame = new JFrame("SRTF Result");
-        frame.setSize(900, 700);
-        frame.setLayout(new BorderLayout(8, 8));
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-
-        String[] cols = {"PID", "AT", "BT", "CT", "TAT", "WT"};
-        String[][] data = new String[r.processes.length][6];
-
-        for (int i = 0; i < r.processes.length; i++) {
-            Process p = r.processes[i];
-            data[i][0] = p.pid;
-            data[i][1] = String.valueOf(p.arrivalTime);
-            data[i][2] = String.valueOf(p.burstTime);
-            data[i][3] = String.valueOf(p.completionTime);
-            data[i][4] = String.valueOf(p.turnaroundTime());
-            data[i][5] = String.valueOf(p.waitingTime());
-        }
-
-        JTable table = new JTable(data, cols);
-        table.setFillsViewportHeight(true);
-        table.setPreferredScrollableViewportSize(new Dimension(860, 150));
-        JScrollPane tableScroll = new JScrollPane(table);
-        frame.add(tableScroll, BorderLayout.NORTH);
-
-        JPanel ganttOuter = new JPanel();
-        ganttOuter.setLayout(new BorderLayout());
-        ganttOuter.setBorder(BorderFactory.createTitledBorder("Gantt Chart"));
-        JPanel ganttPanel = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-
-                int paddingLeft = 25;
-                int y = 30;
-                int height = 40;
-                int x = paddingLeft;
-
-                Color[] pastel = {
-                    new Color(255, 179, 186),
-                    new Color(255, 223, 186),
-                    new Color(255, 255, 186),
-                    new Color(186, 255, 201),
-                    new Color(186, 225, 255)
-                };
-
-                // draw blocks
-                for (int i = 0; i < r.groupedSize; i++) {
-                    String block = r.grouped[i];
-                    String pid = block.substring(0, block.indexOf("("));
-                    int len = Integer.parseInt(block.substring(block.indexOf("(") + 1, block.indexOf(")")));
-
-                    g.setColor(pastel[i % pastel.length]);
-                    int blockWidth = len * 28;
-                    g.fillRect(x, y, blockWidth, height);
-
-                    g.setColor(Color.DARK_GRAY);
-                    g.drawRect(x, y, blockWidth, height);
-
-                    g.setColor(Color.BLACK);
-                    g.drawString(pid, x + 6, y + 25);
-
-                    x += blockWidth;
-                }
-
-                int tickX = paddingLeft;
-                g.setColor(Color.BLACK);
-                g.setFont(g.getFont().deriveFont(Font.PLAIN, 12f));
-
-                int currentTime = 0;
-                g.drawString(String.valueOf(0), tickX - 6, y + height + 20);
-
-                for (int i = 0; i < r.groupedSize; i++) {
-                    String block = r.grouped[i];
-                    int len = Integer.parseInt(block.substring(block.indexOf("(") + 1, block.indexOf(")")));
-                    tickX += len * 28;
-                    currentTime += len;
-                    g.drawString(String.valueOf(currentTime), tickX - 6, y + height + 20);
-                }
-            }
-        };
-
-        ganttPanel.setPreferredSize(new Dimension(860, 350));
-        ganttOuter.add(new JScrollPane(ganttPanel), BorderLayout.CENTER);
-
-        frame.add(ganttOuter, BorderLayout.CENTER);
-
-        frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
     }
 }
