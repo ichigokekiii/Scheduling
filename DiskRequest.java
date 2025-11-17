@@ -1,4 +1,6 @@
 public class DiskRequest {
+
+    //same lang dito pero object ng sa disk scheduling
     public int track;       
     public int movement;     
     public boolean served;   

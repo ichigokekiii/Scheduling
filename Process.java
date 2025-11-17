@@ -1,5 +1,6 @@
 public class Process {
 
+    //gumawa ako object para isa nalang di paulit-ulit
     public String pid;
     public int arrivalTime;
     public int burstTime;
